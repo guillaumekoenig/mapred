@@ -1,4 +1,4 @@
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::fs::File;
 use std::{env, process};
 use std::collections::BTreeMap;
@@ -18,10 +18,13 @@ fn parse_args(args: &[String]) -> Result<&str, &str> {
     }
 }
 
-fn count_words(_buf: &Vec<u8>) -> BTreeMap<String, usize> {
+fn count_words(buf: &Vec<u8>) -> BTreeMap<&[u8], usize> {
     let mut bt = BTreeMap::new();
-    bt.insert(String::from("b"), 1);
-    bt.insert(String::from("a"), 2);
+    for word in buf.split(|&c| c.is_ascii_whitespace() || c.is_ascii_punctuation()) {
+        if word.len() > 0 {
+            *bt.entry(word).or_insert(0) += 1;
+        }
+    }
     bt
 }
 
@@ -35,7 +38,10 @@ fn main() {
         eprintln!("Error reading file: {}", err);
         process::exit(2);
     });
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
     for (word, count) in count_words(&buf).iter() {
-        println!("{}={}", word, count);
+        stdout.write(word).unwrap();
+        println!("={}", count);
     }
 }
