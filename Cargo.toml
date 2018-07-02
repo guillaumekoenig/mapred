@@ -1,0 +1,6 @@
+[package]
+name = "mapred"
+version = "0.1.0"
+authors = ["guillaume"]
+
+[dependencies]
