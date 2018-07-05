@@ -35,8 +35,65 @@ impl<'a> Iterator for Job<'a> {
                 self.pos += d;
                 Some(&self.buf[oldpos..self.pos])
             }
-            None if oldpos < self.buf.len() => Some(&self.buf[oldpos..]),
+            None if oldpos < self.buf.len() => {
+                self.pos = self.buf.len();
+                Some(&self.buf[oldpos..])
+            }
             None => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Job;
+
+    #[test]
+    fn mapping_empty_input_on_one_thread() {
+        let mut job = Job::new(b"", 1, |&c| c.is_ascii_whitespace());
+        assert_eq!(job.iter().next(), None);
+    }
+
+    #[test]
+    fn mapping_empty_input_on_10_threads() {
+        let mut job = Job::new(b"", 10, |&c| c.is_ascii_whitespace());
+        assert_eq!(job.iter().next(), None);
+    }
+
+    #[test]
+    fn mapping_two_words_on_two_threads() {
+        let mut job = Job::new(b"hello world", 2, |&c| c.is_ascii_whitespace());
+        let it = job.iter();
+        assert_eq!(it.next(), Some(&b"hello"[..]));
+        assert_eq!(it.next(), Some(&b" world"[..]));
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn mapping_8_words_on_3_threads() {
+        let mut job = Job::new(b"a b c d e f g h", 3, |&c| c.is_ascii_whitespace());
+        let it = job.iter();
+        assert_eq!(it.next(), Some(&b"a b c"[..]));
+        assert_eq!(it.next(), Some(&b" d e f"[..]));
+        assert_eq!(it.next(), Some(&b" g h"[..]));
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn mapping_4_uneven_words_on_3_threads() {
+        let mut job = Job::new(b"a b c ef", 3, |&c| c.is_ascii_whitespace());
+        let it = job.iter();
+        assert_eq!(it.next(), Some(&b"a b"[..]));
+        assert_eq!(it.next(), Some(&b" c"[..]));
+        assert_eq!(it.next(), Some(&b" ef"[..]));
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn mapping_one_word_on_two_threads() {
+        let mut job = Job::new(b"bouh", 2, |&c| c.is_ascii_whitespace());
+        let it = job.iter();
+        assert_eq!(it.next(), Some(&b"bouh"[..]));
+        assert_eq!(it.next(), None);
     }
 }
