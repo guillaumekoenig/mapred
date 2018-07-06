@@ -25,16 +25,6 @@ fn isdelim(c: &u8) -> bool {
     c.is_ascii_whitespace() || c.is_ascii_punctuation()
 }
 
-fn count_words(buf: &[u8]) -> BTreeMap<&[u8], usize> {
-    let mut bt = BTreeMap::new();
-    for word in buf.split(isdelim) {
-        if word.len() > 0 {
-            *bt.entry(word).or_insert(0) += 1;
-        }
-    }
-    bt
-}
-
 fn main() {
     let args: Vec<String> = env::args().collect();
     let filename = parse_args(&args).unwrap_or_else(|err| {
@@ -48,11 +38,7 @@ fn main() {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
     let job = Job::new(&buf, 2, isdelim);
-    for chunk in job.iter() {
-        print!("START:");
-        stdout.write(chunk).unwrap();
-    }
-    for (word, count) in count_words(&buf).iter() {
+    for (word, count) in job.run() {
         stdout.write(word).unwrap();
         println!("={}", count);
     }

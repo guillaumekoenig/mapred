@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::collections::BTreeMap;
 
 pub struct Job<'a> {
     buf: &'a [u8],
@@ -15,8 +16,20 @@ impl<'a> Job<'a> {
         }
     }
 
-    pub fn iter(&self) -> JobChunkIter {
+    fn iter(&self) -> JobChunkIter {
         JobChunkIter { job: self, pos: 0 }
+    }
+
+    pub fn run(&self) -> Vec<(&[u8], usize)> {
+        // for chunk in self.iter() {
+        let chunk = self.buf;
+        let mut bt = BTreeMap::new();
+        for word in chunk.split(self.isdelim) {
+            if word.len() > 0 {
+                *bt.entry(word).or_insert(0) += 1;
+            }
+        }
+        bt.iter().map(|(&k, &v)| (k, v)).collect()
     }
 }
 
