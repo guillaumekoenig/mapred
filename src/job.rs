@@ -1,5 +1,7 @@
 use std::cmp::min;
 use std::collections::BTreeMap;
+use std::{iter, slice};
+use std::ops::Add;
 
 pub struct Job<'a> {
     buf: &'a [u8],
@@ -33,7 +35,7 @@ impl<'a> Job<'a> {
     }
 }
 
-pub struct JobChunkIter<'a> {
+struct JobChunkIter<'a> {
     job: &'a Job<'a>,
     pos: usize,
 }
@@ -56,6 +58,42 @@ impl<'a> Iterator for JobChunkIter<'a> {
                 Some(&job.buf[oldpos..])
             }
             None => None,
+        }
+    }
+}
+
+struct MergeSortIter<'a, K: 'a, V: 'a> {
+    i1: iter::Peekable<slice::Iter<'a, (K, V)>>,
+    i2: iter::Peekable<slice::Iter<'a, (K, V)>>,
+}
+
+impl<'a, K: 'a + Ord, V: Copy + Add<Output = V>> Iterator for MergeSortIter<'a, K, V> {
+    type Item = V;
+    fn next(&mut self) -> Option<V> {
+        match (self.i1.peek(), self.i2.peek()) {
+            (None, None) => None,
+            (Some(&&(_, v)), None) => {
+                self.i1.next();
+                Some(v)
+            }
+            (None, Some(&&(_, v))) => {
+                self.i2.next();
+                Some(v)
+            }
+            (Some(&&(ref k1, v1)), Some(&&(ref k2, v2))) if k1 == k2 => {
+                self.i1.next();
+                self.i2.next();
+                Some(v1 + v2)
+            }
+            (Some(&&(ref k1, v1)), Some(&&(ref k2, v2))) => {
+                if k1 < k2 {
+                    self.i1.next();
+                    Some(v1)
+                } else {
+                    self.i2.next();
+                    Some(v2)
+                }
+            }
         }
     }
 }
