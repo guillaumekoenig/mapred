@@ -47,7 +47,7 @@ fn main() {
     });
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
-    let mut job = Job::new(&buf, 2, isdelim);
+    let job = Job::new(&buf, 2, isdelim);
     for chunk in job.iter() {
         print!("START:");
         stdout.write(chunk).unwrap();
