@@ -9,6 +9,16 @@ pub struct Job<'a> {
     isdelim: fn(&u8) -> bool,
 }
 
+fn count_words(chunk: &[u8], isdelim: fn(&u8) -> bool) -> BTreeMap<&[u8], usize> {
+    let mut bt = BTreeMap::new();
+    for word in chunk.split(isdelim) {
+        if word.len() > 0 {
+            *bt.entry(word).or_insert(0) += 1;
+        }
+    }
+    bt
+}
+
 impl<'a> Job<'a> {
     pub fn new(buf: &[u8], nthreads: usize, isdelim: fn(&u8) -> bool) -> Job {
         Job {
@@ -24,14 +34,10 @@ impl<'a> Job<'a> {
 
     pub fn run(&self) -> Vec<(&[u8], usize)> {
         // for chunk in self.iter() {
-        let chunk = self.buf;
-        let mut bt = BTreeMap::new();
-        for word in chunk.split(self.isdelim) {
-            if word.len() > 0 {
-                *bt.entry(word).or_insert(0) += 1;
-            }
-        }
-        bt.iter().map(|(&k, &v)| (k, v)).collect()
+        count_words(self.buf, self.isdelim)
+            .iter()
+            .map(|(&k, &v)| (k, v))
+            .collect()
     }
 }
 

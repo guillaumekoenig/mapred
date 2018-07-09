@@ -1,7 +1,6 @@
 use std::io::{self, Read, Write};
 use std::fs::File;
 use std::{env, process};
-use std::collections::BTreeMap;
 
 mod job;
 use job::Job;
