@@ -15,7 +15,7 @@ impl<K: Ord, V: Add<Output = V>, I: Iterator<Item = (K, V)>, J: Iterator<Item = 
             (None, None) => return None,
             (Some(_), None) => Ordering::Less,
             (None, Some(_)) => Ordering::Greater,
-            (Some(&(ref k1, _)), Some(&(ref k2, _))) => k1.cmp(&k2),
+            (Some(&(ref k1, _)), Some(&(ref k2, _))) => k1.cmp(k2),
         };
         match ord {
             Ordering::Less => self.i1.next(),
