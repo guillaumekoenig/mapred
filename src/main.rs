@@ -3,6 +3,8 @@ use std::fs::File;
 use std::{env, process};
 
 mod job;
+mod merge;
+
 use job::Job;
 
 fn read_file(filename: &str) -> io::Result<Vec<u8>> {
