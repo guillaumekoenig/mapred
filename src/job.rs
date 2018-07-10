@@ -33,11 +33,15 @@ impl<'a> Job<'a> {
     }
 
     pub fn run(&self) -> Vec<(&[u8], usize)> {
-        // for chunk in self.iter() {
-        count_words(self.buf, self.isdelim)
-            .iter()
-            .map(|(&k, &v)| (k, v))
-            .collect()
+        let chunks = self.iter();
+        chunks.fold(Vec::new(), |acc, chunk| {
+            let bt = count_words(chunk, self.isdelim);
+            let merge = MergeSortIter {
+                i1: acc.iter().map(|&(k, v)| (k, v)).peekable(),
+                i2: bt.iter().map(|(&k, &v)| (k, v)).peekable(),
+            };
+            merge.collect()
+        })
     }
 }
 
