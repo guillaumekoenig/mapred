@@ -1,6 +1,6 @@
-use std::cmp::min;
+use std::cmp::{min, Ordering};
 use std::collections::BTreeMap;
-use std::{iter, slice};
+use std::iter;
 use std::ops::Add;
 
 pub struct Job<'a> {
@@ -68,37 +68,28 @@ impl<'a> Iterator for JobChunkIter<'a> {
     }
 }
 
-struct MergeSortIter<'a, K: 'a, V: 'a> {
-    i1: iter::Peekable<slice::Iter<'a, (K, V)>>,
-    i2: iter::Peekable<slice::Iter<'a, (K, V)>>,
+struct MergeSortIter<K, V, I: Iterator<Item = (K, V)>, J: Iterator<Item = (K, V)>> {
+    i1: iter::Peekable<I>,
+    i2: iter::Peekable<J>,
 }
 
-impl<'a, K: 'a + Ord, V: Copy + Add<Output = V>> Iterator for MergeSortIter<'a, K, V> {
-    type Item = V;
-    fn next(&mut self) -> Option<V> {
-        match (self.i1.peek(), self.i2.peek()) {
-            (None, None) => None,
-            (Some(&&(_, v)), None) => {
-                self.i1.next();
-                Some(v)
-            }
-            (None, Some(&&(_, v))) => {
-                self.i2.next();
-                Some(v)
-            }
-            (Some(&&(ref k1, v1)), Some(&&(ref k2, v2))) if k1 == k2 => {
-                self.i1.next();
-                self.i2.next();
-                Some(v1 + v2)
-            }
-            (Some(&&(ref k1, v1)), Some(&&(ref k2, v2))) => {
-                if k1 < k2 {
-                    self.i1.next();
-                    Some(v1)
-                } else {
-                    self.i2.next();
-                    Some(v2)
-                }
+impl<K: Ord, V: Add<Output = V>, I: Iterator<Item = (K, V)>, J: Iterator<Item = (K, V)>> Iterator
+    for MergeSortIter<K, V, I, J> {
+    type Item = (K, V);
+    fn next(&mut self) -> Option<(K, V)> {
+        let ord = match (self.i1.peek(), self.i2.peek()) {
+            (None, None) => return None,
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (Some(&(ref k1, _)), Some(&(ref k2, _))) => k1.cmp(&k2),
+        };
+        match ord {
+            Ordering::Less => self.i1.next(),
+            Ordering::Greater => self.i2.next(),
+            Ordering::Equal => {
+                let (k, v1) = self.i1.next().unwrap();
+                let (_, v2) = self.i2.next().unwrap();
+                Some((k, v1 + v2))
             }
         }
     }
