@@ -39,9 +39,8 @@ fn main() {
     });
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
-    let job = Job::new(&buf, nthreads, isdelim);
-    for (word, count) in job.run() {
-        stdout.write(word).unwrap();
+    for (word, count) in Job::run(buf, nthreads, isdelim) {
+        stdout.write(&word).unwrap();
         println!("={}", count);
     }
 }

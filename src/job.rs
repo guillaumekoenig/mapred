@@ -1,52 +1,60 @@
 use std::cmp::min;
 use std::collections::BTreeMap;
+use std::thread;
+use std::sync::Arc;
+use std::mem;
 
 use merge::*;
 
-pub struct Job<'a> {
-    buf: &'a [u8],
+pub struct Job {
+    buf: Arc<Vec<u8>>,
     approx_chunk_size: usize,
     isdelim: fn(&u8) -> bool,
 }
 
-fn count_words(chunk: &[u8], isdelim: fn(&u8) -> bool) -> BTreeMap<&[u8], usize> {
+fn count_words(chunk: &[u8], isdelim: fn(&u8) -> bool) -> BTreeMap<Vec<u8>, usize> {
     let mut bt = BTreeMap::new();
     for word in chunk.split(isdelim) {
         if word.len() > 0 {
-            *bt.entry(word).or_insert(0) += 1;
+            *bt.entry(Vec::from(word)).or_insert(0) += 1;
         }
     }
     bt
 }
 
-impl<'a> Job<'a> {
-    pub fn new(buf: &[u8], nthreads: usize, isdelim: fn(&u8) -> bool) -> Job {
-        Job {
-            buf,
-            approx_chunk_size: buf.len() / nthreads,
-            isdelim,
-        }
-    }
-
+impl Job {
     fn iter(&self) -> JobChunkIter {
         JobChunkIter { job: self, pos: 0 }
     }
 
-    pub fn run(&self) -> Vec<(&[u8], usize)> {
-        let chunks = self.iter();
-        chunks.fold(Vec::new(), |acc, chunk| {
-            let bt = count_words(chunk, self.isdelim);
-            let merge = MergeSortIter {
-                i1: acc.iter().map(|&(k, v)| (k, v)).peekable(),
-                i2: bt.iter().map(|(&k, &v)| (k, v)).peekable(),
+    pub fn run(buf: Vec<u8>, nthreads: usize, isdelim: fn(&u8) -> bool) -> Vec<(Vec<u8>, usize)> {
+        // let chunks = self.iter();
+        let buf = Arc::new(buf);
+        let mut handles = Vec::new();
+        for _ in 0..nthreads {
+            let buf = Arc::clone(&buf);
+            let h = thread::spawn(move || count_words(&*buf, isdelim));
+            handles.push(h);
+        }
+        let mut acc = Vec::<(Vec<u8>, usize)>::new();
+        // handles.iter().fold(Vec::new(), |acc, h| {
+        for h in handles {
+            let bt = h.join().unwrap();
+            let mut new = {
+                let merge = MergeSortIter {
+                    i1: acc.iter().map(|&(ref k, v)| (k.clone(), v)).peekable(),
+                    i2: bt.iter().map(|(&ref k, &v)| (k.clone(), v)).peekable(),
+                };
+                merge.collect()
             };
-            merge.collect()
-        })
+            mem::swap(&mut new, &mut acc);
+        } //)
+        acc
     }
 }
 
 struct JobChunkIter<'a> {
-    job: &'a Job<'a>,
+    job: &'a Job,
     pos: usize,
 }
 
