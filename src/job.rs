@@ -2,7 +2,6 @@ use std::cmp::min;
 use std::collections::BTreeMap;
 use std::thread;
 use std::sync::Arc;
-use std::mem;
 use std::ops;
 
 use merge::*;
@@ -37,30 +36,28 @@ impl Job {
         JobChunkIter { job: self, pos: 0 }
     }
 
-    // Note : can't use reference here, investigate
     pub fn run(self) -> Vec<(Vec<u8>, usize)> {
         let chunks = self.iter();
-        let mut handles = Vec::new();
-        for range in chunks {
-            let buf = Arc::clone(&self.buf);
-            let isdelim = self.isdelim;
-            let h = thread::spawn(move || count_words(&(*buf)[range], isdelim));
-            handles.push(h);
-        }
-        let mut acc = Vec::<(Vec<u8>, usize)>::new();
-        // handles.iter().fold(Vec::new(), |acc, h| {
-        for h in handles {
+        // We must collect into vector to force spawning all threads,
+        // otherwise the threads will run in turn (because iterators
+        // are evaluated lazily)
+        let handles: Vec<_> = chunks
+            .map(|range| {
+                let buf = Arc::clone(&self.buf);
+                let isdelim = self.isdelim;
+                thread::spawn(move || count_words(&(*buf)[range], isdelim))
+            })
+            .collect();
+        handles.into_iter().fold(Vec::new(), |acc, h| {
             let bt = h.join().unwrap();
-            let mut new = {
-                let merge = MergeSortIter {
-                    i1: acc.iter().map(|&(ref k, v)| (k.clone(), v)).peekable(),
-                    i2: bt.iter().map(|(&ref k, &v)| (k.clone(), v)).peekable(),
-                };
-                merge.collect()
+            let merge = MergeSortIter {
+                // Use into_iter so we take ownership and don't need
+                // to make a copy of key
+                i1: acc.into_iter().peekable(),
+                i2: bt.into_iter().peekable(),
             };
-            mem::swap(&mut new, &mut acc);
-        } //)
-        acc
+            merge.collect()
+        })
     }
 }
 
