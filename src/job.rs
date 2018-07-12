@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::thread;
 use std::sync::Arc;
 use std::mem;
+use std::ops;
 
 use merge::*;
 
@@ -23,17 +24,27 @@ fn count_words(chunk: &[u8], isdelim: fn(&u8) -> bool) -> BTreeMap<Vec<u8>, usiz
 }
 
 impl Job {
+    pub fn new(buf: Vec<u8>, nthreads: usize, isdelim: fn(&u8) -> bool) -> Job {
+        let len = buf.len();
+        Job {
+            buf: Arc::new(buf),
+            approx_chunk_size: len / nthreads,
+            isdelim,
+        }
+    }
+
     fn iter(&self) -> JobChunkIter {
         JobChunkIter { job: self, pos: 0 }
     }
 
-    pub fn run(buf: Vec<u8>, nthreads: usize, isdelim: fn(&u8) -> bool) -> Vec<(Vec<u8>, usize)> {
-        // let chunks = self.iter();
-        let buf = Arc::new(buf);
+    // Note : can't use reference here, investigate
+    pub fn run(self) -> Vec<(Vec<u8>, usize)> {
+        let chunks = self.iter();
         let mut handles = Vec::new();
-        for _ in 0..nthreads {
-            let buf = Arc::clone(&buf);
-            let h = thread::spawn(move || count_words(&*buf, isdelim));
+        for range in chunks {
+            let buf = Arc::clone(&self.buf);
+            let isdelim = self.isdelim;
+            let h = thread::spawn(move || count_words(&(*buf)[range], isdelim));
             handles.push(h);
         }
         let mut acc = Vec::<(Vec<u8>, usize)>::new();
@@ -59,8 +70,8 @@ struct JobChunkIter<'a> {
 }
 
 impl<'a> Iterator for JobChunkIter<'a> {
-    type Item = &'a [u8];
-    fn next(&mut self) -> Option<&'a [u8]> {
+    type Item = ops::Range<usize>;
+    fn next(&mut self) -> Option<(ops::Range<usize>)> {
         // Split buf in chunks of roughly buf.len()/nthreads bytes,
         // making sure to split on word boundary only
         let job = &self.job;
@@ -69,11 +80,11 @@ impl<'a> Iterator for JobChunkIter<'a> {
         match job.buf[self.pos..].iter().position(job.isdelim) {
             Some(d) => {
                 self.pos += d;
-                Some(&job.buf[oldpos..self.pos])
+                Some(oldpos..self.pos)
             }
             None if oldpos < job.buf.len() => {
                 self.pos = job.buf.len();
-                Some(&job.buf[oldpos..])
+                Some(oldpos..self.pos)
             }
             None => None,
         }
