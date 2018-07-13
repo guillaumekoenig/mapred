@@ -24,7 +24,8 @@ fn parse_args(args: &[String]) -> Result<(&str, usize), Box<Error>> {
 }
 
 fn isdelim(c: &u8) -> bool {
-    c.is_ascii_whitespace() || c.is_ascii_punctuation()
+    // Match C's isspace() || ispunct()
+    c.is_ascii_whitespace() || c.is_ascii_punctuation() || *c == 11
 }
 
 fn main() {
