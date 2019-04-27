@@ -1,13 +1,14 @@
 use std::cmp::min;
 use std::collections::BTreeMap;
-use std::thread;
-use std::sync::Arc;
+use std::convert::AsRef;
 use std::ops;
+use std::sync::Arc;
+use std::thread;
 
 use merge::*;
 
-pub struct Job {
-    buf: Arc<Vec<u8>>,
+pub struct Job<A> {
+    buf: Arc<A>,
     approx_chunk_size: usize,
     isdelim: fn(&u8) -> bool,
 }
@@ -22,9 +23,12 @@ fn count_words(chunk: &[u8], isdelim: fn(&u8) -> bool) -> BTreeMap<Vec<u8>, usiz
     bt
 }
 
-impl Job {
-    pub fn new(buf: Vec<u8>, nthreads: usize, isdelim: fn(&u8) -> bool) -> Job {
-        let len = buf.len();
+impl<A> Job<A>
+where
+    A: AsRef<[u8]> + Send + Sync + 'static,
+{
+    pub fn new(buf: A, nthreads: usize, isdelim: fn(&u8) -> bool) -> Job<A> {
+        let len = buf.as_ref().len();
         Job {
             buf: Arc::new(buf),
             approx_chunk_size: len / nthreads,
@@ -32,7 +36,7 @@ impl Job {
         }
     }
 
-    fn iter(&self) -> JobChunkIter {
+    fn iter(&self) -> JobChunkIter<A> {
         JobChunkIter { job: self, pos: 0 }
     }
 
@@ -45,9 +49,8 @@ impl Job {
             .map(|range| {
                 let buf = Arc::clone(&self.buf);
                 let isdelim = self.isdelim;
-                thread::spawn(move || count_words(&(*buf)[range], isdelim))
-            })
-            .collect();
+                thread::spawn(move || count_words(&(*buf).as_ref()[range], isdelim))
+            }).collect();
         handles.into_iter().fold(Vec::new(), |acc, h| {
             let bt = h.join().unwrap();
             let merge = MergeSortIter {
@@ -61,26 +64,27 @@ impl Job {
     }
 }
 
-struct JobChunkIter<'a> {
-    job: &'a Job,
+struct JobChunkIter<'a, A: 'a> {
+    job: &'a Job<A>,
     pos: usize,
 }
 
-impl<'a> Iterator for JobChunkIter<'a> {
+impl<'a, A: AsRef<[u8]>> Iterator for JobChunkIter<'a, A> {
     type Item = ops::Range<usize>;
     fn next(&mut self) -> Option<(ops::Range<usize>)> {
         // Split buf in chunks of roughly buf.len()/nthreads bytes,
         // making sure to split on word boundary only
         let job = &self.job;
+        let buf = (*job.buf).as_ref();
         let oldpos = self.pos;
-        self.pos = min(oldpos + job.approx_chunk_size, job.buf.len());
-        match job.buf[self.pos..].iter().position(job.isdelim) {
+        self.pos = min(oldpos + job.approx_chunk_size, buf.len());
+        match buf[self.pos..].iter().position(job.isdelim) {
             Some(d) => {
                 self.pos += d;
                 Some(oldpos..self.pos)
             }
-            None if oldpos < job.buf.len() => {
-                self.pos = job.buf.len();
+            None if oldpos < buf.len() => {
+                self.pos = buf.len();
                 Some(oldpos..self.pos)
             }
             None => None,
@@ -106,38 +110,42 @@ mod tests {
 
     #[test]
     fn mapping_two_words_on_two_threads() {
-        let job = Job::new(b"hello world", 2, |&c| c.is_ascii_whitespace());
+        let v = b"hello world";
+        let job = Job::new(v.clone(), 2, |&c| c.is_ascii_whitespace());
         let mut it = job.iter();
-        assert_eq!(it.next(), Some(&b"hello"[..]));
-        assert_eq!(it.next(), Some(&b" world"[..]));
+        assert_eq!(&v[it.next().unwrap()], b"hello");
+        assert_eq!(&v[it.next().unwrap()], b" world");
         assert_eq!(it.next(), None);
     }
 
     #[test]
     fn mapping_8_words_on_3_threads() {
-        let job = Job::new(b"a b c d e f g h", 3, |&c| c.is_ascii_whitespace());
+        let v = b"a b c d e f g h";
+        let job = Job::new(v.clone(), 3, |&c| c.is_ascii_whitespace());
         let mut it = job.iter();
-        assert_eq!(it.next(), Some(&b"a b c"[..]));
-        assert_eq!(it.next(), Some(&b" d e f"[..]));
-        assert_eq!(it.next(), Some(&b" g h"[..]));
+        assert_eq!(&v[it.next().unwrap()], b"a b c");
+        assert_eq!(&v[it.next().unwrap()], b" d e f");
+        assert_eq!(&v[it.next().unwrap()], b" g h");
         assert_eq!(it.next(), None);
     }
 
     #[test]
     fn mapping_4_uneven_words_on_3_threads() {
-        let job = Job::new(b"a b c ef", 3, |&c| c.is_ascii_whitespace());
+        let v = b"a b c ef";
+        let job = Job::new(v.clone(), 3, |&c| c.is_ascii_whitespace());
         let mut it = job.iter();
-        assert_eq!(it.next(), Some(&b"a b"[..]));
-        assert_eq!(it.next(), Some(&b" c"[..]));
-        assert_eq!(it.next(), Some(&b" ef"[..]));
+        assert_eq!(&v[it.next().unwrap()], b"a b");
+        assert_eq!(&v[it.next().unwrap()], b" c");
+        assert_eq!(&v[it.next().unwrap()], b" ef");
         assert_eq!(it.next(), None);
     }
 
     #[test]
     fn mapping_one_word_on_two_threads() {
-        let job = Job::new(b"bouh", 2, |&c| c.is_ascii_whitespace());
+        let v = b"bouh";
+        let job = Job::new(v.clone(), 2, |&c| c.is_ascii_whitespace());
         let mut it = job.iter();
-        assert_eq!(it.next(), Some(&b"bouh"[..]));
+        assert_eq!(&v[it.next().unwrap()], b"bouh");
         assert_eq!(it.next(), None);
     }
 }

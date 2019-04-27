@@ -1,18 +1,21 @@
-use std::io::{self, Read, Write};
-use std::fs::File;
-use std::{env, process};
-use std::error::Error;
+extern crate memmap;
 
 mod job;
 mod merge;
 
+use std::error::Error;
+use std::fs::File;
+use std::io::{self, Write};
+use std::{env, process};
+
 use job::*;
 
-fn read_file(filename: &str) -> io::Result<Vec<u8>> {
-    let mut f = File::open(filename)?;
-    let mut buf = Vec::new();
-    f.read_to_end(&mut buf)?;
-    Ok(buf)
+use memmap::Mmap;
+
+fn mmap_file(filename: &str) -> io::Result<Mmap> {
+    let f = File::open(filename)?;
+    let mmap = unsafe { Mmap::map(&f)? };
+    Ok(mmap)
 }
 
 fn parse_args(args: &[String]) -> Result<(&str, usize), Box<Error>> {
@@ -34,8 +37,8 @@ fn main() {
         eprintln!("Error parsing args: {}", err);
         process::exit(1);
     });
-    let buf = read_file(&filename).unwrap_or_else(|err| {
-        eprintln!("Error reading file: {}", err);
+    let buf = mmap_file(&filename).unwrap_or_else(|err| {
+        eprintln!("Error mmapping file: {}", err);
         process::exit(2);
     });
     let stdout = io::stdout();
