@@ -23,6 +23,9 @@ are not yet clear (I am testing with random data so that it doesn't
 matter that the tree in C is unbalanced). Failing to guess, my next
 best lead would be to profile in detail both implementations.
 
+(I tried to cut the word from chunk with `unsafe {
+chunk.get_unchecked(start..oneafter) }` to avoid bound checking, but
+with limited improvement on execution speed)
 
 ## Passing references to threads in Rust
 
@@ -55,11 +58,12 @@ nothing wrong with that as long as the implementation guarantees
 overall safety.
 
 Here I have not taken up the reference approach, but instead sticked
-to a _concrete_ type (as opposed to a reference). First it was Vec<u8>
-as a buffer read from file, then Mmap from the memmap crate, and
-finally AsRef<[u8]>, which is a trait whose behavior captures both the
-Vec<u8> and Mmap implementations. (Apparently concrete types satisfy
-'static.)
+to a _concrete_ type (as opposed to a reference). First it was
+`Vec<u8>` as a buffer read from file, then `Mmap` from the memmap
+crate, and finally `AsRef<[u8]>`, which is a trait whose behavior
+captures both the `Vec<u8>` and `Mmap` implementations. (Apparently
+concrete types satisfy 'static if they don't themselves contain
+references.)
 
 Explanation for static lifetime : https://users.rust-lang.org/t/why-does-thread-spawn-need-static-lifetime-for-generic-bounds/4541
 
